@@ -9,6 +9,7 @@ class CNN_Model:
         loaders,
         loss_fn=nn.CrossEntropyLoss(),
         epochs=20,
+        patience=5,
         optimizer=Adam,
         lr=0.001,
         grey_scale=False,
@@ -20,7 +21,7 @@ class CNN_Model:
         self.num_classes = num_classes
         self.dropout_conv = dropout_conv
         self.dropout_fc = dropout_fc
-
+        self.patience = patience
         # makse torch use my gpu for the training
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -114,6 +115,14 @@ class CNN_Model:
 
         return loss, accuracy
 
+    # just methods to save and load trained parameters
+    def save_model(self, path="pixel_pretrained.pt"):
+        torch.save(self.model.state_dict(), path)
+
+    def load_model(self, path="pixel_pretrained.pt"):
+        self.model.load_state_dict(torch.load(path))
+        self.model.to(self.device)
+
     def train_model(self):
         history = {
             "train_loss": [],
@@ -121,6 +130,12 @@ class CNN_Model:
             "val_loss": [],
             "val_acc": [],
         }
+
+        # i will implement early stopping with best model saving
+        # start val accuracy with -1 so that the first epoch always counts as an improvment
+        best_val_acu = -1
+        epochs_without_improvement = 0
+        best_epoch = 0
 
         for epoch in range(self.epochs):
             self.model.train()
@@ -171,4 +186,24 @@ class CNN_Model:
             history["val_loss"].append(val_loss)
             history["val_acc"].append(val_acc)
 
+            # early stopping
+            if val_acc > best_val_acu:
+                best_val_acu = val_acc
+                epochs_without_improvement = 0
+                best_epoch = epoch
+                self.save_model()
+            else:
+                epochs_without_improvement += 1
+
+            if epochs_without_improvement >= self.patience:
+                print(f"early stopping at epoch {epoch}")
+                print(f"best epoch: {best_epoch} with val acc: {best_val_acu}")
+                break
+
+        # laod the best model in memory
+        self.load_model()
         return history
+
+    def test_model(self):
+        _, accuracy = self.eval_model(split="test")
+        print(f"test accuracy: {accuracy:.4f}")

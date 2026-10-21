@@ -7,3 +7,5 @@ pixel_loaders = Pixel_Loader.get_loaders()
 model = CNN_Model(loaders=pixel_loaders)
 
 model.train_model()
+
+model.test_model()
