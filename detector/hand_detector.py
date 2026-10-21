@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 import mediapipe as mp
 
 
@@ -10,12 +11,12 @@ class Hand_Detector:
         self,
         max_hands=1,
         # this is the 4th time i tweek those values btw, this time it seems to work ok
-        min_detection_confidence=0.7,
-        min_tracking_confidence=0.6,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5,
         padding=30,
     ):
         # i crop the box slighlty larger than the hand to match the traingin data
-        self.padding = padding
+        self.box_padding = padding
         self.hands = mp.solutions.hands.Hands(
             static_image_mode=False,
             max_num_hands=max_hands,
@@ -23,7 +24,7 @@ class Hand_Detector:
             min_tracking_confidence=min_tracking_confidence,
         )
 
-    def detect(self, frame):
+    def detect_box(self, frame):
         height, width, _ = frame.shape
 
         # claude recommended cvtColor this method when reviewing, it works like torch premute
@@ -52,14 +53,32 @@ class Hand_Detector:
                 # get the min and max x and y, i know this looks complicated but is really now
                 # you get the min/max point and subsract/add the padding value to create the padding box
                 # the outer min, max are just so that the box coordinates never go out of bounds
-                x1 = max(0, int(min(all_x)) - self.padding)
-                y1 = max(0, int(min(all_y)) - self.padding)
-                x2 = min(width, int(max(all_x)) + self.padding)
-                y2 = min(height, int(max(all_y)) + self.padding)
+                x1 = max(0, int(min(all_x)) - self.box_padding)
+                y1 = max(0, int(min(all_y)) - self.box_padding)
+                x2 = min(width, int(max(all_x)) + self.box_padding)
+                y2 = min(height, int(max(all_y)) + self.box_padding)
 
                 boxes.append((x1, y1, x2, y2))
 
         return boxes
+
+    def get_landmarks(self, frame):
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        result = self.hands.process(rgb)
+
+        if not result.multi_hand_landmarks:
+            return None
+
+        landmarks = result.multi_hand_landmarks[0].landmark
+
+        # get the 21 3d points and return them as a numpy array
+        points = np.zeros((21, 3))
+        for i, landmark in enumerate(landmarks):
+            points[i, 0] = landmark.x
+            points[i, 1] = landmark.y
+            points[i, 2] = landmark.z
+
+        return points.flatten()
 
     def crop_hand(self, frame, box):
         x1, y1, x2, y2 = box
