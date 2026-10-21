@@ -7,6 +7,13 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 
+# normally python looks to dir relative to the caller file (in my case app.py)
+# not the files that actually use the dir,
+# the path lib has way to "anchor" the data path to the files that use it
+# path.resolve() will return the absolute path
+# .parent drops the filename, so paths built from it ignore the working directory.
+DATA_ROOT = Path(__file__).resolve().parent
+
 
 # i noticed that this logic is gonna repaet for both loader classes so i pulled it into a base class
 #
@@ -172,7 +179,7 @@ class Pixel_Loader(Base_Loader):
     # i call the base constructor becaude all of the logic are from the base class and usses these parameters
     def __init__(
         self,
-        data_dir="pixel-data",
+        data_dir=DATA_ROOT / "pixel-data",
         image_size=(400, 400),
         batch_size=32,
         val_percent=0.15,
@@ -236,7 +243,7 @@ class Landmark_Loader(Base_Loader):
 
     def __init__(
         self,
-        data_dir="landmark-data",
+        data_dir=DATA_ROOT / "landmark-data",
         normalize=True,
         batch_size=32,
         val_size=0.15,
