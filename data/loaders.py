@@ -1,5 +1,7 @@
 from pathlib import Path  # for path manip
-from PIL import Image  # for laoding images localy
+from PIL import (
+    Image,
+)  # this is a libiray called pillow it adds alot of usfull stuff  for laoding images localy
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
@@ -176,19 +178,29 @@ class Pixel_Loader(Base_Loader):
         val_percent=0.15,
         test_percent=0.15,
         seed=42,
+        # i dont really know if grey scalling the images will help so i will add
+        # an option for it rather than hardcoding it
+        grey_scale=False,
     ):
         super().__init__(data_dir, batch_size, val_percent, test_percent, seed)
 
         self.image_size = image_size
+        self.grey_scale = grey_scale
 
     # impelemnt loading image data set
     def load_features(self, paths):
         images = []
+
+        if self.grey_scale:
+            mode = "L"
+        else:
+            mode = "RGB"
+
         for path in paths:
             # use pil to open teh image
             image = Image.open(path)
             # convert to rgb
-            image = image.convert("RGB")
+            image = image.convert(mode)
             # resize so all images have the same size
             image = image.resize(self.image_size)
             # the np asarray main feature is it doent copy the data, so it is a lot faster (claude recommendation)
@@ -203,6 +215,12 @@ class Pixel_Loader(Base_Loader):
         # stake all imahes into one array, axis 0 is the num of images
         # right now the shape should be (num_images, hieght (400), width (400), channels (3))
         X = np.stack(images)
+
+        # a proplem with supporting greyscaled data is tha the imaages lose one dimention (channels)
+        # so i will add one to the end to make it (num_images, hieght, width, channels)
+        # the mothod np.expand_dims() can do that, the axis = -1 means the one will be added to the end
+        if self.grey_scale:
+            X = np.expand_dims(X, axis=-1)
 
         # to make it work with torch conv layrs i will reorde the dimentions to be (num_images, channels, hieght, width)
         # this is just equivilant to torch.permute(0, 3, 1, 2), only on the numpy side
