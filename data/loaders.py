@@ -93,6 +93,11 @@ class Base_Loader:
 
         return paths, labels_array
 
+    # this meathod just gets the class name for a passed in label,
+    # making use of the class names attribute i made
+    def get_labele_class_name(self, label):
+        return self.class_names[label]
+
     def split_data(self, X, y):
         # for conviniece sake to keep the data size dynamic
         # i will just use sklearn train_test_split insted of hard coding slices

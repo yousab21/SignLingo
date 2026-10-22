@@ -1,6 +1,11 @@
 import torch
+import numpy as np
 from torch import nn as nn
 from torch.optim import Adam
+
+# the model was traind on left handed images, to make it work with right handed images i need to flip the images
+# i found this pillow.ImageOps that makes that a one liner
+from PIL import Image, ImageOps
 
 
 class CNN_Model:
@@ -16,12 +21,17 @@ class CNN_Model:
         num_classes=36,
         dropout_conv=0.2,
         dropout_fc=0.3,
+        image_size=(400, 400),
+        class_names=None,
     ):
         self.grey_scale = grey_scale
         self.num_classes = num_classes
         self.dropout_conv = dropout_conv
         self.dropout_fc = dropout_fc
         self.patience = patience
+        self.class_names = class_names
+        self.image_size = image_size
+
         # makse torch use my gpu for the training
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -203,6 +213,42 @@ class CNN_Model:
         # laod the best model in memory
         self.load_model()
         return history
+
+    def predict(self, image):
+        # i need to do the same normalization as the training data
+        # which in my case is to divide by 255, and handling greyscale/colored cahnnels
+        if self.grey_scale:
+            mode = "L"
+        else:
+            mode = "RGB"
+
+        # the model expects images to be 400x400, RGB so i will resize and reorder channels
+        pil_image = Image.fromarray(image).convert(mode)
+        # filp the image to make it right handed
+        pil_image = ImageOps.mirror(pil_image)
+        pil_image = pil_image.resize(self.image_size)
+
+        # re array-iafy the image
+        array = np.asarray(pil_image, dtype=np.float32) / 255
+        # rehandle the bug about grey_scale missing a dimintion i talked about before
+        if self.grey_scale:
+            array = np.expand_dims(array, axis=-1)
+
+        # reorder the diminions to (channels, width, height)
+        array = array.transpose(2, 0, 1)
+        # turn the numpy array to a torch tenosr, also right now the tensor is missing a batch size dimintion
+        # unsqueeze(0) will add a a new dimintion with value 1 at the start to act like the batch size
+        tensor = torch.from_numpy(array).unsqueeze(0).to(self.device)
+
+        self.model.eval()
+        with torch.no_grad():
+            logits = self.model(tensor)
+            probabilities = torch.softmax(logits, dim=1)
+
+            probability, predicted_class = probabilities.max(dim=1)
+
+        # tenost.item() converts the single element tensor to plain values.
+        return self.class_names[predicted_class.item()], probability.item()
 
     def test_model(self):
         _, accuracy = self.eval_model(split="test")
