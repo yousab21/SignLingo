@@ -10,6 +10,7 @@ class Hand_Detector:
     def __init__(
         self,
         max_hands=1,
+        static_image_mode=False,
         # this is the 4th time i tweek those values btw, this time it seems to work ok
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
@@ -18,7 +19,7 @@ class Hand_Detector:
         # i crop the box slighlty larger than the hand to match the traingin data
         self.box_padding = padding
         self.hands = mp.solutions.hands.Hands(
-            static_image_mode=False,
+            static_image_mode=static_image_mode,
             max_num_hands=max_hands,
             min_detection_confidence=min_detection_confidence,
             min_tracking_confidence=min_tracking_confidence,

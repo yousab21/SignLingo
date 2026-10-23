@@ -36,7 +36,7 @@ def build_model():
 def main():
     model = build_model()
 
-    detector = Hand_Detector(max_hands=1)
+    detector = Hand_Detector(max_hands=1, static_image_mode=False)
 
     # open webcam 0 as a stream
     cap = cv2.VideoCapture(0)

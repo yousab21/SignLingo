@@ -200,20 +200,50 @@ class Landmark_Model:
 
         return landmarks.flatten()
 
+    # FAILED EXPERIMENT
     # again same logic as the pixel model just much simpler scine normalizaion is no
-    def predict(self, landmarks):
+    #    def predict(self, landmarks):
+    #        features = self.prepare_landmarks(landmarks)
+    #
+    #       tonsor = torch.from_numpy(features).unsqueeze(0).to(self.device)
+    #
+    #        self.model.eval()
+    #       with torch.no_grad():
+    #            logits = self.model(tonsor)
+    #            probabilities = torch.softmax(logits, dim=1)
+    #
+    #           probability, predicted_class = probabilities.max(dim=1)
+    #
+    #        return self.class_names[predicted_class.item()], probability.item()
+
+    # to make the predection aveging easied i cant just return the one class name
+    # i need to get the the  probabilities distrobution for all classes and average them
+    def predict_probabilities(self, landmarks):
+        # do the same normalization
         features = self.prepare_landmarks(landmarks)
 
-        tonsor = torch.from_numpy(features).unsqueeze(0).to(self.device)
+        # turn the np arrays into tensors
+        tensor = torch.from_numpy(features).unsqueeze(0).to(self.device)
 
         self.model.eval()
+
         with torch.no_grad():
-            logits = self.model(tonsor)
+            logits = self.model(tensor)
             probabilities = torch.softmax(logits, dim=1)
 
-            probability, predicted_class = probabilities.max(dim=1)
+        # numppy cant read tensors from the gpu (ask me how i know XD) so i need to
+        # move it back to the cpu before i turn it into a numpy array
+        # the index 0 is fot droping the batchsize unsqeed added at the beggining
+        return probabilities[0].cpu().numpy()
 
-        return self.class_names[predicted_class.item()], probability.item()
+        # i can now use that back to get the hark class names again
+        # with the diffrence to actuallt get the probabilities from calling predict_probabilities
+        #
+
+    def predict(self, landmarks):
+        # to get hard class names i can just call argmax on the predected probabilities
+        probabilities = self.predict_probabilities(landmarks)
+        predicted_class = int(probabilities.argmax())
 
     def test_model(self):
         _, accuracy = self.eval_model(split="test")
