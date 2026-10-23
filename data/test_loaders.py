@@ -1,20 +1,21 @@
 from loaders import Pixel_Loader, Landmark_Loader
 
-pixel_colored = Pixel_Loader(grey_scale=False)
-pixel_greyscale = Pixel_Loader(grey_scale=True)
+pixel_augmented = Pixel_Loader(augment=True)
+pixel_not_augmente = Pixel_Loader(augment=False)
 landmark = Landmark_Loader()
 
-pixel_loader_coloered = pixel_colored.get_loaders()
-pixel_loader_greyscaled = pixel_greyscale.get_loaders()
+pixel_loader_augmented = pixel_augmented.get_loaders()
+pixel_loader_not_augmented = pixel_not_augmente.get_loaders()
 landmark_loader = landmark.get_loaders()
 
 
-print("Pixel data colored")
-images, image_labels = next(iter(pixel_loader_coloered["train"]))
+print("Pixel data not augmented")
+images, image_labels = next(iter(pixel_loader_not_augmented["train"]))
 print(images.shape, image_labels.shape)
 print()
-print("Pixel data greyscaled")
-images, image_labels = next(iter(pixel_loader_greyscaled["train"]))
+
+print("Pixel data augmented")
+images, image_labels = next(iter(pixel_loader_augmented["train"]))
 print(images.shape, image_labels.shape)
 print()
 

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
+from torchvision.transforms import v2
 
 # normally python looks to dir relative to the caller file (in my case app.py)
 # not the files that actually use the dir,
@@ -182,6 +183,9 @@ class Pixel_Loader(Base_Loader):
     extensions = {".jpg", ".jpeg", ".png"}
 
     # i call the base constructor becaude all of the logic are from the base class and usses these parameters
+    # after testing the model i found out it is highly relaiant on the camera prespective and recommendation
+    # so i need to implement some sort of data augmentation
+    # i dont want to mess with other laoder classes so i will keep all changes in this class
     def __init__(
         self,
         data_dir=DATA_ROOT / "pixel-data",
@@ -193,11 +197,33 @@ class Pixel_Loader(Base_Loader):
         # i dont really know if grey scalling the images will help so i will add
         # an option for it rather than hardcoding it
         grey_scale=False,
+        # flag to augment the data
+        augment=True,
+        # number of augmented versions added per original image in every training batch
+        # the batch now holds batch_size * (1 + augment_copies) images
+        augment_copies=1,
     ):
         super().__init__(data_dir, batch_size, val_percent, test_percent, seed)
 
         self.image_size = image_size
         self.grey_scale = grey_scale
+        self.augment = augment
+        self.augment_copies = augment_copies
+
+        self.transform = v2.Compose(
+            [
+                # mirror the images so the model works with left and right hands
+                v2.RandomHorizontalFlip(p=0.5),
+                # rotation up to 20 degrees either way
+                # shift of up to 10% of the image size
+                # zoom between 80% and 120%
+                v2.RandomAffine(degrees=20, translate=(0.1, 0.1), scale=(0.8, 1.2)),
+                # this is supposed to simulate viewing the frame from an angle
+                v2.RandomPerspective(distortion_scale=0.2, p=0.5),
+                # change the brightness and contrast
+                v2.ColorJitter(brightness=0.3, contrast=0.3),
+            ]
+        )
 
     # impelemnt loading image data set
     def load_features(self, paths):
@@ -239,6 +265,56 @@ class Pixel_Loader(Base_Loader):
         X = X.transpose(0, 3, 1, 2)
 
         return X
+
+    # this build the training batch from both clean and augmented images
+    def augment_batch(self, samples):
+        # get the images labels from the tensors into paralla arrays
+        images = [image for image, _ in samples]
+        labels = [label for _, label in samples]
+
+        # turn the image into a noraml list
+        all_images = list(images)
+
+        # look at this buiteiful inline loop and no i didnt come up with it
+        # you DONT want to see how i did this before papa claude put some magic in my brain XD
+        # the loop runs for how much extra data-sized copies you want i just set it 1 so it dobles the data
+        # and it runs transform on each image by its own so that each one gets a different augmentation
+        # that is why i turned them into a pure list
+        for _ in range(self.augment_copies):
+            all_images.extend(self.transform(image) for image in images)
+
+        # as the imaes are just repeated in the same order just with augmentation
+        # i can just repeate the lables and they will match, isntthis is just beuetiful
+        all_labels = labels * (1 + self.augment_copies)
+
+        # turn it back to a tensor and return it
+
+        return torch.stack(all_images), torch.stack(all_labels)
+
+    # i also need to overwirte the make_loaders method to add the augmentation
+
+    # this in my opinion is the most beuetuful piece of code in the whole project
+    def make_loaders(self, splits):
+        # this makes the three loaders normally in with the implementation in the parent class
+        loaders = super().make_loaders(splits)
+
+        # if the augment flag is tru apply the augmentation, here is hwo i do that
+        if self.augment:
+            # remember how we already created the three loaders using the parent's implementation of the method
+            # i only replace the train loader which is the only one that needs to be augmented,
+            # the whole reson this is possible is because of that collate_fn parameter,
+            # what the functio is suposed to do in general is to asseble tensors into a batch
+            # torch has a defual impelemntation for it which i can replace with my own by passing in a function
+            # by defualt it just stacks the exsisting tensors into one big tensor and calles it a batch
+            # but i replace it with my augment_batch function, wich adds augmenated samples to the exsisting ones
+            # before you ask this also was not my idea, thatnk you papa claude
+            loaders["train"] = DataLoader(
+                loaders["train"].dataset,
+                batch_size=self.batch_size,
+                shuffle=True,
+                collate_fn=self.augment_batch,
+            )
+        return loaders
 
 
 class Landmark_Loader(Base_Loader):
