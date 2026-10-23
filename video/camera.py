@@ -75,3 +75,15 @@ class Video:
                     color=self.drawing_color,
                     thickness=-1,
                 )
+
+    def draw_image(self, path, letter=None):
+        image = cv2.imread(path)
+
+        if image is None:
+            raise FileNotFoundError(f"Could not load image: {path}")
+
+        self.draw_text(image, f"Sign for letter [ {letter} ]")
+        cv2.imshow("image", image)
+        # wait key 0 indefinitely for a key to be pressed
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()

@@ -5,90 +5,84 @@ from data.loaders import Pixel_Loader
 from models.pixel_models import CNN_Model
 from video.camera import Video
 
-# the saved weights
-WEIGHTS_PATH = "pixel_pretrained.pt"
 
-# predictions below this probability are shown as "?" in the label
-MIN_CONFIDENCE = 0.0
+class pixel_model_tester:
+    def __init__(self, min_confidence=0.0, weights_path="pixel_pretrained.pt"):
+        # the saved weights
+        self.WEIGHTS_PATH = weights_path
+        # predictions below this probability are shown as "?" in the label
+        self.MIN_CONFIDENCE = min_confidence
 
+    def build_model(self):
+        loader = Pixel_Loader()
 
-def build_model():
-    loader = Pixel_Loader()
+        loader.get_paths_and_labels()
+        class_names = loader.class_names
 
-    loader.get_paths_and_labels()
-    class_names = loader.class_names
+        model = CNN_Model(
+            loaders=None,
+            num_classes=len(class_names),
+            class_names=class_names,
+            image_size=loader.image_size,
+            grey_scale=loader.grey_scale,
+        )
 
-    model = CNN_Model(
-        loaders=None,
-        num_classes=len(class_names),
-        class_names=class_names,
-        image_size=loader.image_size,
-        grey_scale=loader.grey_scale,
-    )
+        model.load_model(self.WEIGHTS_PATH)
+        return model
 
-    model.load_model(WEIGHTS_PATH)
-    return model
+    def run_test(self):
+        model = self.build_model()
 
+        # Video raises its own error if the camera cannot be opened, so no manual
+        # check is needed here. It is created before the detector so a camera
+        # failure leaves nothing to clean up.
+        video = Video()
+        detector = Hand_Detector(max_hands=1, static_image_mode=False)
 
-def main():
-    model = build_model()
+        # claude recommended the try finaly block to garantee that the detecor is close
+        try:
+            while True:
+                frame = video.get_frame()
 
-    # Video raises its own error if the camera cannot be opened, so no manual
-    # check is needed here. It is created before the detector so a camera
-    # failure leaves nothing to clean up.
-    video = Video()
-    detector = Hand_Detector(max_hands=1, static_image_mode=False)
+                # None means the camera stopped delivering frames
+                if frame is None:
+                    break
 
-    # claude recommended the try finaly block to garantee that the detecor is close
-    try:
-        while True:
-            frame = video.get_frame()
+                # detect the hand
+                boxes = detector.detect_box(frame)
 
-            # None means the camera stopped delivering frames
-            if frame is None:
-                break
+                if not boxes:
+                    video.draw_text(frame, "No hand detected")
 
-            # detect the hand
-            boxes = detector.detect_box(frame)
+                for box in boxes:
+                    # slice the hand box from the frame to feed it to the model
+                    crop = detector.crop_hand(frame, box)
 
-            if not boxes:
-                video.draw_text(frame, "No hand detected")
+                    # if there is no hand, skip prediction in this frame
+                    if crop.size == 0:
+                        continue
 
-            for box in boxes:
-                # slice the hand box from the frame to feed it to the model
-                crop = detector.crop_hand(frame, box)
+                    rgb_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
 
-                # if there is no hand, skip prediction in this frame
-                if crop.size == 0:
-                    continue
+                    # use my classes to get predectit class names and probability
+                    name, probability = model.predict(rgb_crop)
 
-                rgb_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+                    video.draw_box(frame, box)
 
-                # use my classes to get predectit class names and probability
-                name, probability = model.predict(rgb_crop)
+                    # low confidence is shown as "?"
+                    if probability >= self.MIN_CONFIDENCE:
+                        label = f"{name} ({probability:.0%})"
+                    else:
+                        label = f"? ({probability:.0%})"
 
-                # Drawing happens after predict() because the crop shares memory
-                # with the frame, so drawing earlier would alter the model's input.
-                video.draw_box(frame, box)
+                    video.draw_text(frame, label)
 
-                # Low confidence is shown as "?", the same as in the landmark script.
-                if probability >= MIN_CONFIDENCE:
-                    label = f"{name} ({probability:.0%})"
-                else:
-                    label = f"? ({probability:.0%})"
-
-                video.draw_text(frame, label)
-
-            # display_frame returns False once 'q' is pressed, which ends the loop
-            if not video.display_frame(frame):
-                break
-    finally:
-        # close MediaPipe, the camera and the windows even if an error occurs.
-        # Video has no close() method, so the camera is released directly.
-        detector.close()
-        video.cap.release()
-        cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    main()
+                # display_frame returns False once 'q' is pressed, which ends the loop
+                if not video.display_frame(frame):
+                    break
+        finally:
+            # close MediaPipe, the camera and the windows even if an error occurs.
+            # Video has no close() method, so the camera is released directly.
+            detector.close()
+            video.cap.release()
+            cv2.destroyAllWindows()

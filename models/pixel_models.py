@@ -24,6 +24,7 @@ class CNN_Model:
         image_size=(400, 400),
         class_names=None,
     ):
+        self.name = "CNN_Model"
         self.grey_scale = grey_scale
         self.num_classes = num_classes
         self.dropout_conv = dropout_conv

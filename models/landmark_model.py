@@ -22,6 +22,7 @@ class Landmark_Model:
         normalize=True,
         best_model_path="landmark_pretrained.pt",
     ):
+        self.name = "Landmark_Model"
         self.patience = patience
         self.lr = lr
         self.input_dim = input_dim
