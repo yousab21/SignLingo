@@ -9,7 +9,7 @@ from video.camera import Video
 WEIGHTS_PATH = "pixel_pretrained.pt"
 
 # predictions below this probability are shown as "?" in the label
-MIN_CONFIDENCE = 0.5
+MIN_CONFIDENCE = 0.0
 
 
 def build_model():
