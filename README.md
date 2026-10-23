@@ -1,4 +1,4 @@
-# SignLingo 🤟
+# SignLingo
 
 **An AI-powered sign language learning assistant.**
 
