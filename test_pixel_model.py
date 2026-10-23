@@ -3,16 +3,13 @@ import cv2
 from detector.hand_detector import Hand_Detector
 from data.loaders import Pixel_Loader
 from models.pixel_models import CNN_Model
+from video.camera import Video
 
 # the saved weights
 WEIGHTS_PATH = "pixel_pretrained.pt"
 
-# i use this threshhold to draw a redbox around low proba predections
+# predictions below this probability are shown as "?" in the label
 MIN_CONFIDENCE = 0.5
-
-# these colors are in BGR not rgb
-COLOR_CONFIDENT = (0, 255, 0)
-COLOR_UNCERTAIN = (0, 0, 255)
 
 
 def build_model():
@@ -36,37 +33,26 @@ def build_model():
 def main():
     model = build_model()
 
+    # Video raises its own error if the camera cannot be opened, so no manual
+    # check is needed here. It is created before the detector so a camera
+    # failure leaves nothing to clean up.
+    video = Video()
     detector = Hand_Detector(max_hands=1, static_image_mode=False)
-
-    # open webcam 0 as a stream
-    cap = cv2.VideoCapture(0)
-    # cap.isOpened is just a flag to check if the camera is open
-    # if it doesnt i just reaise an error and let the program crash
-    if not cap.isOpened():
-        detector.close()
-        raise RuntimeError(f"cant open camera")
 
     # claude recommended the try finaly block to garantee that the detecor is close
     try:
         while True:
-            ok, frame = cap.read()
-            if not ok:
+            frame = video.get_frame()
+
+            # None means the camera stopped delivering frames
+            if frame is None:
                 break
 
             # detect the hand
             boxes = detector.detect_box(frame)
 
-            # the drawing on the frame is mostly just generated to be honest
             if not boxes:
-                cv2.putText(
-                    frame,
-                    "No hand detected",
-                    (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    COLOR_UNCERTAIN,
-                    2,
-                )
+                video.draw_text(frame, "No hand detected")
 
             for box in boxes:
                 # slice the hand box from the frame to feed it to the model
@@ -81,36 +67,26 @@ def main():
                 # use my classes to get predectit class names and probability
                 name, probability = model.predict(rgb_crop)
 
-                # drawing the text on the frame, i kinda understand how this works
-                # but it is also just generated with copilot
-                color = (
-                    COLOR_CONFIDENT
-                    if probability >= MIN_CONFIDENCE
-                    else COLOR_UNCERTAIN
-                )
-                x1, y1, x2, y2 = box
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(
-                    frame,
-                    f"{name} {probability:.0%}",
-                    # max() keeps the label on-screen when the box touches the top edge.
-                    (x1, max(25, y1 - 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.9,
-                    color,
-                    2,
-                )
+                # Drawing happens after predict() because the crop shares memory
+                # with the frame, so drawing earlier would alter the model's input.
+                video.draw_box(frame, box)
 
-            # draw the frame
-            cv2.imshow("frame", frame)
+                # Low confidence is shown as "?", the same as in the landmark script.
+                if probability >= MIN_CONFIDENCE:
+                    label = f"{name} ({probability:.0%})"
+                else:
+                    label = f"? ({probability:.0%})"
 
-            # cv2.waitKey waits for a key press to close the window in this case it is "q"
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+                video.draw_text(frame, label)
+
+            # display_frame returns False once 'q' is pressed, which ends the loop
+            if not video.display_frame(frame):
                 break
     finally:
         # close MediaPipe, the camera and the windows even if an error occurs.
+        # Video has no close() method, so the camera is released directly.
         detector.close()
-        cap.release()
+        video.cap.release()
         cv2.destroyAllWindows()
 
 
